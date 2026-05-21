@@ -8,19 +8,23 @@ import { json, urlencoded } from 'express';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Límite aumentado para imágenes base64
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN || '*',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+  });
+
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 
-  // Pipes globales (validaciones DTO)
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: true,
     transform: true,
   }));
 
-  await app.listen(3000);
-  console.log('✅ API Gateway online → http://localhost:3000');
+  await app.listen(process.env.PORT || 3000);
+  console.log(`✅ API Gateway online → http://localhost:${process.env.PORT || 3000}`);
 }
 
 bootstrap();

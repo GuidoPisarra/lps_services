@@ -1,50 +1,60 @@
 /* eslint-disable prettier/prettier */
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport, ClientProxyFactory } from '@nestjs/microservices';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { ProtectedController } from './controllers/protected.controller';
 import { PaymentsController } from './controllers/payment.controller';
 import { VehicleInspectionController } from './controllers/vehicle-inspection.controller';
+import { LogsController } from './controllers/logs.controller';
 
 @Module({
   imports: [
-    ClientsModule.register([
+    ConfigModule.forRoot({ isGlobal: true }),
+    ClientsModule.registerAsync([
       {
         name: 'PAYMENTS_SERVICE',
-        transport: Transport.RMQ,
-        options: {
-          urls: [process.env.RABBIT_URL || 'amqp://guest:guest@localhost:5672'],
-          queue: 'payments_queue',
-          queueOptions: { durable: true },
-        },
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [config.getOrThrow<string>('RABBITMQ_URL')],
+            queue: 'payments_queue',
+            queueOptions: { durable: true },
+          },
+        }),
       },
       {
         name: 'LOGS_SERVICE',
-        transport: Transport.RMQ,
-        options: {
-          urls: ['amqp://guest:guest@localhost:5672'],
-          queue: 'logs_queue',
-          queueOptions: { durable: true },
-        },
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [config.getOrThrow<string>('RABBITMQ_URL')],
+            queue: 'logs_queue',
+            queueOptions: { durable: true },
+          },
+        }),
       },
     ]),
     AuthModule,
   ],
-  controllers: [ProtectedController, PaymentsController, VehicleInspectionController],
+  controllers: [ProtectedController, PaymentsController, VehicleInspectionController, LogsController],
   providers: [
     {
       provide: 'VEHICLE_INSPECTION_SERVICE',
-      useFactory: () =>
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
         ClientProxyFactory.create({
           transport: Transport.RMQ,
           options: {
-            urls: ['amqp://guest:guest@localhost:5672'],
+            urls: [config.getOrThrow<string>('RABBITMQ_URL')],
             queue: 'vehicle_inspection_rpc',
             queueOptions: { durable: true },
           },
         }),
     },
   ],
-  exports: ['VEHICLE_INSPECTION_SERVICE'], // <--- importante si se usa en otros módulos
+  exports: ['VEHICLE_INSPECTION_SERVICE'],
 })
 export class AppModule { }

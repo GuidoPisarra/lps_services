@@ -5,23 +5,30 @@ import { AuthController } from './auth.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './jwt.strategy';
+import { ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [
-    JwtModule.register({
+    JwtModule.registerAsync({
       global: true,
-      secret: 'SUPER_SECRETO_DEV', // ⚠️ En producción, usar variable de entorno
-      signOptions: { expiresIn: '1h' },
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.getOrThrow<string>('JWT_SECRET'),
+        signOptions: { expiresIn: '1h' },
+      }),
     }),
-    ClientsModule.register([
+    ClientsModule.registerAsync([
       {
         name: 'USERS_SERVICE',
-        transport: Transport.RMQ,
-        options: {
-          urls: ['amqp://guest:guest@localhost:5672'],
-          queue: 'users_queue',
-          queueOptions: { durable: true },
-        },
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [config.getOrThrow<string>('RABBITMQ_URL')],
+            queue: 'users_queue',
+            queueOptions: { durable: true },
+          },
+        }),
       },
     ]),
   ],

@@ -6,7 +6,7 @@
 
 import { Controller, Post, Body, UseGuards, Request, HttpException, HttpStatus, Inject } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Client, ClientProxy, Transport } from '@nestjs/microservices';
+import { ClientProxy } from '@nestjs/microservices';
 import { lastValueFrom, timeout } from 'rxjs';
 import { CratePaymentDTO } from '../dto/payments/create-payment.dto';
 
@@ -16,15 +16,6 @@ export class PaymentsController {
     @Inject('PAYMENTS_SERVICE') private paymentsClient: ClientProxy,
     @Inject('LOGS_SERVICE') private logsClient: ClientProxy,
   ) { }
-
-  @Client({
-    transport: Transport.RMQ,
-    options: {
-      urls: ['amqp://guest:guest@localhost:5672'],
-      queue: 'payments_queue',
-      queueOptions: { durable: true },
-    },
-  })
 
   @UseGuards(AuthGuard('jwt'))
   @Post('crear_pago')

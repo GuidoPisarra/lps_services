@@ -1,0 +1,138 @@
+version: '3.9'
+
+services:
+
+  # ─── Infraestructura ──────────────────────────────────────────────────────
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: lps_rabbitmq
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mysql:
+    image: mysql:8
+    container_name: lps_mysql
+    ports:
+      - '3306:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: cobradores
+      MYSQL_USER: lps_user
+      MYSQL_PASSWORD: lps_pass
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:7
+    container_name: lps_mongo
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', 'db.adminCommand("ping")']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Microservicios ───────────────────────────────────────────────────────
+
+  microservice-users:
+    build: ./microservice-users
+    container_name: lps_users
+    env_file: ./microservice-users/.env
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: lps_user
+      DB_PASSWORD: lps_pass
+      DB_NAME: cobradores
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  microservice-payments:
+    build: ./microservice-payments
+    container_name: lps_payments
+    env_file: ./microservice-payments/.env
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: lps_user
+      DB_PASSWORD: lps_pass
+      DB_NAME: cobradores
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  microservice-logs:
+    build: ./microservice-logs
+    container_name: lps_logs
+    env_file: ./microservice-logs/.env
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      MONGO_URI: mongodb://mongo:27017/logsdb
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  microservice-vehicle-inspection:
+    build: ./microservice-vehicle-inspection
+    container_name: lps_vehicle_inspection
+    env_file: ./microservice-vehicle-inspection/.env
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: lps_gateway
+    ports:
+      - '3000:3000'
+    env_file: ./api-gateway/.env
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      PORT: 3000
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      microservice-users:
+        condition: service_started
+      microservice-payments:
+        condition: service_started
+      microservice-logs:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  mongo_data:

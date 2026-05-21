@@ -1,217 +1,191 @@
 
----
+# LPS Services — APP_COBRADORES
 
-## 🚀 Arquitectura
-
-El proyecto usa **NestJS** con comunicación entre microservicios mediante **RabbitMQ**.
-
-### 🔗 Flujo general
-
-1. El cliente (Postman, Angular, etc.) realiza una petición al **Gateway**.
-2. El **Gateway** usa `@ClientProxy` para enviar el mensaje al microservicio correspondiente.
-3. El microservicio procesa la solicitud y devuelve la respuesta al Gateway.
-4. El Gateway responde al cliente.
+Sistema de cobro de peajes/vehículos basado en microservicios. El flujo principal es: el cobrador registra un vehículo → el sistema lo inspecciona con visión computacional → se procesa el cobro.
 
 ---
 
-## 🧠 Servicios actuales
+## Stack tecnológico
 
-### Crar microsrevicio
-- nest new nombre-microservicio
+| Componente | Tecnología |
+|---|---|
+| API Gateway | NestJS 11 + TypeScript |
+| Microservicios (users, payments, logs) | NestJS 11 + TypeScript |
+| Microservicio de inspección | Django 4.2 + Python |
+| Mensajería | RabbitMQ |
+| Base de datos (users, payments) | MySQL 8 |
+| Base de datos (logs) | MongoDB 7 |
+| Autenticación | JWT (Passport) |
+| Visión computacional | YOLO8 + EasyOCR + PyTorch (MobileNetV3) |
 
-Dentro de la carpeta del microservicio: 
+---
 
-pnpm install bcrypt
-pnpm add @nestjs/passport @nestjs/jwt passport passport-jwt
-pnpm install amqp-connection-manager amqplib
+## Arquitectura
 
-### 1. `api-gateway`
-- Expone los endpoints HTTP (REST).
-- Valida y genera JWT.
-- Se comunica con los microservicios usando RabbitMQ.
-
-**Endpoints principales:**
-| Método | Ruta | Descripción |
-|--------|-------|-------------|
-| POST | `/auth/login` | Autenticación de usuario |
-| GET | `/me` | Devuelve el usuario actual autenticado (token JWT requerido) |
-
-### 2. `microservice-users`
-- Maneja usuarios, registro, login y validación.
-- Expone patrones de mensaje como:
-  - `{ cmd: 'auth.validate' }`
-
-**Ejemplo de mensaje recibido:**
-```json
-{
-  "cmd": "auth.validate",
-  "data": { "email": "admin@cobradores.com", "password": "123456" }
-}
 ```
-Respuesta esperada:
-```json
-
-{
-  "ok": true,
-  "user": {
-    "id": 1,
-    "email": "admin@cobradores.com",
-    "name": "Admin"
-  }
-}
+Cliente (Postman / Angular / etc.)
+        │
+        ▼
+   API Gateway :3000  (REST + JWT)
+   ┌──────────────────────────────────┐
+   │  POST /auth/login                │
+   │  POST /auth/create_user          │
+   │  POST /payments/crear_pago       │
+   │  POST /inspection/inspeccionar   │
+   │  GET  /me                        │
+   │  GET  /logs                      │
+   └──────────────────────────────────┘
+        │  RabbitMQ
+        ├──────────────► users_queue           → microservice-users
+        ├──────────────► payments_queue        → microservice-payments
+        ├──────────────► logs_queue            → microservice-logs
+        └──────────────► vehicle_inspection_rpc → microservice-vehicle-inspection
 ```
 
-⚙️ Instalación
-1. Clonar el repositorio
-git clone https://github.com/tuusuario/APP_COBRADORES_API.git
-cd APP_COBRADORES_API
+---
 
-2. Instalar dependencias
-pnpm install
+## Endpoints
 
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| POST | `/auth/login` | — | Login, retorna JWT |
+| POST | `/auth/create_user` | — | Registra nuevo usuario |
+| PATCH | `/auth/update_user/:id` | JWT | Actualiza datos de usuario |
+| POST | `/auth/delete_user/:id` | JWT | Elimina usuario |
+| GET | `/me` | JWT | Perfil del usuario autenticado |
+| POST | `/payments/crear_pago` | JWT | Crea y persiste un pago |
+| POST | `/inspection/inspeccionar` | — | Analiza imagen de vehículo (base64) |
+| GET | `/logs` | JWT | Últimos 100 logs de error |
 
-Si no tenés pnpm:
-npm install -g pnpm
+---
 
-correr imagen de mongo para logs 
+## Levantar con Docker Compose (recomendado)
+
+```bash
+# Copiar variables de entorno
+cp api-gateway/.env.example api-gateway/.env
+cp microservice-users/.env.example microservice-users/.env
+cp microservice-payments/.env.example microservice-payments/.env
+cp microservice-logs/.env.example microservice-logs/.env
+cp microservice-vehicle-inspection/.env.example microservice-vehicle-inspection/.env
+
+# Editar cada .env con los valores reales, luego:
+docker compose up --build
+```
+
+El gateway queda disponible en `http://localhost:3000`.
+El panel de RabbitMQ queda en `http://localhost:15672` (guest / guest).
+
+---
+
+## Desarrollo local (sin Docker)
+
+### Requisitos previos
+
+```bash
+# RabbitMQ
+docker run -d --name rabbit -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+
+# MySQL
+docker run -d --name mysql -p 3306:3306 \
+  -e MYSQL_ROOT_PASSWORD=root \
+  -e MYSQL_DATABASE=cobradores \
+  mysql:8
+
+# MongoDB
 docker run -d --name mongo -p 27017:27017 mongo
+```
 
+### Arrancar cada servicio
 
-#BBDD mongo
+```bash
+# Copiar y editar .env de cada servicio primero, luego:
 
-una vez creada se ve con mongosh "mongodb://localhost:27017/logsdb"
+cd microservice-users && pnpm install && pnpm run start:dev
+cd microservice-payments && pnpm install && pnpm run start:dev
+cd microservice-logs && pnpm install && pnpm run start:dev
+cd api-gateway && pnpm install && pnpm run start:dev
 
-se ve la cantidad de documentos con --> db.logs.find().sort({ createdAt: -1 }).limit(5).pretty()
-y muestra la cantidad de documentos con --> db.logs.countDocuments()
+# Vehicle inspection (Python)
+cd microservice-vehicle-inspection
+pip install -r requirements.txt
+python manage.py run_rpc
+```
 
+---
 
-🐇 Configuración de RabbitMQ
+## Variables de entorno
 
-Iniciar RabbitMQ localmente con Docker:
+Cada servicio tiene su propio `.env.example`. Las variables clave son:
 
-docker run -d --hostname my-rabbit --name rabbit -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+| Variable | Descripción |
+|---|---|
+| `JWT_SECRET` | Secreto para firmar JWT (solo en api-gateway) |
+| `RABBITMQ_URL` | URL de conexión a RabbitMQ |
+| `DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME` | MySQL (users y payments) |
+| `MONGO_URI` | URI de MongoDB (logs) |
+| `CORS_ORIGIN` | Origen permitido para CORS (api-gateway) |
 
-despues se levanta con docker ps -a se busca la imagen y docker start id_imagen
+---
 
+## Ejemplo de uso
 
+### Login
 
-
-Acceder al panel de control:
-👉 http://localhost:15672
-
-Usuario: guest
-Contraseña: guest
-
-🔧 Variables de entorno
-
-Cada microservicio y el gateway tienen su propio .env (no se sube al repositorio).
-
-Ejemplo api-gateway/.env:
-
-PORT=3000
-JWT_SECRET=supersecreto
-RABBITMQ_URL=amqp://guest:guest@localhost:5672
-
-
-Ejemplo microservice-users/.env:
-
-RABBITMQ_URL=amqp://guest:guest@localhost:5672
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASS=123456
-DB_NAME=cobradores
-
-🧩 Ejecución
-
-1. Iniciar microservicios
-
-# En una terminal
-cd microservice-users
-pnpm run start:dev
-
-# En otra terminal
-cd microservice-payments
-pnpm run start:dev
-
-2. Iniciar Gateway
-cd api-gateway
-pnpm run start:dev
-
-🧪 Pruebas con Postman
-🔹 Login
-
-POST → http://localhost:3000/auth/login
-
-{
-  "email": "admin@cobradores.com",
-  "password": "123456"
-}
-
-🔹 Perfil (requiere token)
-
-GET → http://localhost:3000/me
-Header:
-
-Authorization: Bearer <token>
-
+```bash
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@cobradores.com","password":"123456"}'
+```
 
 Respuesta:
+```json
+{ "access_token": "eyJ...", "user": { "id": 1, "email": "admin@cobradores.com", "name": "Admin" } }
+```
 
+### Crear pago (requiere token)
+
+```bash
+curl -X POST http://localhost:3000/payments/crear_pago \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"amount": 150.00, "concept": "Peaje ruta 2"}'
+```
+
+### Inspeccionar vehículo
+
+```bash
+curl -X POST http://localhost:3000/inspection/inspeccionar \
+  -H "Content-Type: application/json" \
+  -d '{"imagenBase64": "<base64_string>"}'
+```
+
+Respuesta:
+```json
 {
   "ok": true,
-  "user": {
-    "id": 1,
-    "email": "admin@cobradores.com",
-    "name": "Admin"
+  "data": {
+    "vehicle_detected": true,
+    "plate_detected": true,
+    "plate_text": "AB123CD",
+    "plate_confidence": 0.92,
+    "is_blurry": false,
+    "damage_detected": false
   }
 }
+```
 
-🧰 Stack Tecnológico
+---
 
-Node.js + NestJS
+## Crear un nuevo microservicio
 
-RabbitMQ (mensajería entre microservicios)
+```bash
+nest new nombre-microservicio
+cd nombre-microservicio
+pnpm install @nestjs/microservices amqp-connection-manager amqplib dotenv
+```
 
-PostgreSQL o cualquier base SQL (a definir)
-
-JWT para autenticación
-
-pnpm para manejo de dependencias
-
-TypeScript
-
-📦 Estructura básica de carpetas
-APP_COBRADORES_API/
-│
-├── api-gateway/
-│   ├── src/
-│   │   ├── auth/
-│   │   ├── guards/
-│   │   ├── controllers/
-│   │   ├── main.ts
-│   │   └── app.module.ts
-│   └── .env
-│
-├── microservice-users/
-│   ├── src/
-│   │   ├── controllers/
-│   │   ├── services/
-│   │   ├── repositories/
-│   │   ├── main.ts
-│   │   └── app.module.ts
-│   └── .env
-│
-└── microservice-payments/
-    ├── src/
-    ├── ...
-    └── .env
-
-
-
-### GIT 
-
-Al crear un nuevo microservicio este no se guarda automaticamente en el repo de git entonces:
-
-1- git submodule update --init --recursive
-2- m -rf nombre-microservicio/.git
+> Al crear el microservicio, si tiene su propio `.git`, eliminarlo para que quede bajo el repo principal:
+> ```bash
+> rm -rf nombre-microservicio/.git
+> ```
