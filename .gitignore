@@ -35,6 +35,7 @@ temp/
 
 # Logs
 logs/
+!microservice-logs/src/logs/
 *.log
 log.txt
 nohup.out

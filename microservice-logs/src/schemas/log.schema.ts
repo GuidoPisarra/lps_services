@@ -17,6 +17,12 @@ export class Log extends Document {
 
   @Prop()
   ip?: string;
+
+  @Prop({ default: 'error', enum: ['info', 'warning', 'error'] })
+  level: string;
+
+  @Prop({ default: 'internal', enum: ['internal', 'external'] })
+  source: string;
 }
 
 export const LogSchema = SchemaFactory.createForClass(Log);

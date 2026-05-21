@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(docker rm mysql)",
+      "Read(//c/Program Files/MySQL/**)",
+      "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root --password=\"\" -e \"CREATE DATABASE IF NOT EXISTS cobradores CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\" 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -pmaradona10 -e \"SELECT 'OK';\" 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -pmaradona10 -e \"CREATE DATABASE IF NOT EXISTS cobradores CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; SHOW DATABASES;\" 2>&1)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://guest:guest@localhost:15672/api/queues\" -Method Get)",
+      "Bash(git status *)",
+      "Bash(cd \"c:\\\\Proyectos\\\\lps_services\" && sed -i 's|^logs/$|logs/\\\\n!microservice-logs/src/logs/|' .gitignore && grep -A1 \"^logs/\" .gitignore)"
+    ],
+    "additionalDirectories": [
+      "c:\\Proyectos\\lps_services"
+    ]
+  }
+}

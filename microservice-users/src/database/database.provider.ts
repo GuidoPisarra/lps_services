@@ -20,6 +20,15 @@ export class MySQLProvider implements OnModuleInit {
       port: parseInt(process.env.DB_PORT || '3306', 10),
     });
 
+    await this.connection.execute(`
+      CREATE TABLE IF NOT EXISTS Users (
+        id       INT AUTO_INCREMENT PRIMARY KEY,
+        email    VARCHAR(255) NOT NULL UNIQUE,
+        name     VARCHAR(255) NOT NULL,
+        password VARCHAR(255) NOT NULL
+      )
+    `);
+
     console.log('✅ Conectado a MySQL/MariaDB correctamente');
   }
 
